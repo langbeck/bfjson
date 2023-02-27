@@ -7,5 +7,8 @@ This is only the proof-of-concept tool that I'd created before it was incorporte
 It's rudimental but over time I'll add features that doesn't conflict with the proprietary solution.
 For now I'm using this to showcase how AST parsing could be used for code generation at build time can be better than using reflection-based solutions during runtime.
 
+# References
+This tool have support for a custom engine (based on Dave Cheney's `github.com/pkg/json`) and also for `github.com/valyala/fastjson`.
+
 # Known issues
 - Doesn't support unescaping quoted strings
