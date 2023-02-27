@@ -7,7 +7,14 @@ This is only the proof-of-concept tool that I'd created before it was incorporte
 It's rudimental but over time I'll add features that doesn't conflict with the proprietary solution.
 For now I'm using this to showcase how AST parsing could be used for code generation at build time can be better than using reflection-based solutions during runtime.
 
-# References
+# Usage
+We could use `bfjson` to generate custom decoders using both supported engines for the package `github.com/bsm/openrtb` (which is a classic package for Real-Time Bidding applications) using the code bellow:
+```bash
+mkdir -p codecs/fastjson && bfjson -pkg github.com/bsm/openrtb -engine fastjson -pkgname fastjson -write codecs/fastjson/codec.go
+mkdir -p codecs/custom && bfjson -pkg github.com/bsm/openrtb -engine custom -pkgname custom -write codecs/custom/codec.go
+```
+
+# External references
 This tool have support for a custom engine (based on Dave Cheney's `github.com/pkg/json`) and also for `github.com/valyala/fastjson`.
 
 # Known issues
