@@ -1,0 +1,247 @@
+
+var {{ .ObjectPool }} = sync.Pool{New: func() interface{} { return new({{ .Type }}) }}
+
+func {{ .ObjectReleaser }}(obj *{{ .Type }}) {
+	if obj == nil {
+		return
+	}
+
+	{{range .Fields}}{{if .IsReleasable}}
+	Release_{{ .TypeName }}(obj.{{ .Name }})
+	{{end}}{{end}}
+
+	{{ .ObjectPool }}.Put(obj)
+}
+
+func New_{{ .Name }}() *{{ .Type }} {
+	ref := {{ .ObjectPool }}.Get().(*{{ .Type }})
+	*ref = {{ .Type }}{}
+	return ref
+}
+
+func {{ .ObjectDecoder }}(dec *Decoder, dst *{{ .Type }}) error {
+	return __Internal{{ .ObjectDecoder }}(dec, dst, false)
+}
+
+func __Internal{{ .ObjectDecoder }}(dec *Decoder, dst *{{ .Type }}, started bool) error {
+	if !started {
+		tok, err := dec.NextToken()
+		if err != nil {
+			return err
+		}
+
+		if tok[0] != tokens.ObjectStart {
+			return ErrFormat
+		}
+	}
+
+{{range .Fields}}{{if .Default}}	dst.{{ .Name }} = {{ .Default }}
+{{end}}{{end}}
+
+	for {
+		tokAttr, err := dec.NextToken()
+		if err != nil {
+			return err
+		}
+
+		if tokAttr[0] == tokens.ObjectEnd {
+			return nil
+		}
+
+		name := unsafe.BytesToString(tokAttr)
+		switch name {
+		{{range .Fields}}case `"{{ .NameJSON }}"`:{{if .IsRawMessage}}
+			data, err := dec.NextRawBytes()
+			if err != nil {
+				return err
+			}
+
+			dst.{{ .Name }} = data
+		{{else if .IsUnmarshaler}}
+			data, err := dec.NextRawBytes()
+			if err != nil {
+				return err
+			}
+			{{if .IsPointer}}dst.{{ .Name }} = New_{{ .Type }}{{end}}
+			err = dst.{{ .Name }}.UnmarshalJSON(data)
+			if err != nil {
+				return fmt.Errorf(`could not decode attribute "{{ .NameJSON }}" from {{ $.Type }}: %w`, err)
+			}
+		{{else}}
+			err = {{if .IsBasic}}dec.{{else}}__Internal{{end}}{{ .DecoderRef }}({{if not .IsBasic}}dec, {{end}}&dst.{{ .Name }}{{if .IsObject}}, false{{end}})
+			if err != nil {
+				return fmt.Errorf(`could not decode attribute "{{ .NameJSON }}" from {{ $.Type }}: %w`, err)
+			}
+		{{end}}
+		{{end}}
+		default:
+			err = dec.SkipAttribute()
+			if err != nil {
+				return fmt.Errorf(`skipping unknow attribute %s failed: %w`, name, err)
+			}
+		}
+	}
+}
+
+func {{ .ObjectPtrDecoder }}(dec *Decoder, dst **{{ .Type }}) error {
+	return __Internal{{ .ObjectPtrDecoder }}(dec, dst, false)
+}
+
+func __Internal{{ .ObjectPtrDecoder }}(dec *Decoder, dst **{{ .Type }}, started bool) error {
+	if !started {
+		tok, err := dec.NextToken()
+		if err != nil {
+			return err
+		}
+
+		if tok[0] == tokens.Null {
+			*dst = nil
+			return nil
+		}
+
+		if tok[0] != tokens.ObjectStart {
+			return ErrFormat
+		}
+	}
+
+	pDst := New_{{ .Name }}()
+	err := __Internal{{ .ObjectDecoder }}(dec, pDst, true)
+	if err != nil {
+		return err
+	}
+
+	*dst = pDst
+	return nil
+}
+
+func {{ .ObjectSliceDecoder }}(dec *Decoder, dst *[]{{ .Type }}) error {
+	return __Internal{{ .ObjectSliceDecoder }}(dec, dst)
+}
+
+func __Internal{{ .ObjectSliceDecoder }}(dec *Decoder, dst *[]{{ .Type }}) error {
+	tok, err := dec.NextToken()
+	if err != nil {
+		return err
+	}
+
+	if tok[0] == tokens.Null {
+		*dst = nil
+		return nil
+	}
+
+	if tok[0] != tokens.ArrayStart {
+		return ErrFormat
+	}
+
+	tok, err = dec.NextToken()
+	if err != nil {
+		return err
+	}
+
+	if tok[0] == tokens.ArrayEnd {
+		*dst = []{{ .Type }}{}
+		return nil
+	}
+
+	if tok[0] != tokens.ObjectStart {
+		return ErrFormat
+	}
+
+	slice := make([]{{ .Type }}, 1, DefaultSliceCapacity)
+	err = __Internal{{ .ObjectDecoder }}(dec, &slice[0], true)
+	if err != nil {
+		return err
+	}
+
+	for {
+		tok, err := dec.NextToken()
+		if err != nil {
+			return err
+		}
+
+		if tok[0] == tokens.ArrayEnd {
+			break
+		}
+
+		if tok[0] != tokens.ObjectStart {
+			return ErrFormat
+		}
+
+		var obj {{ .Type }}
+		err = __Internal{{ .ObjectDecoder }}(dec, &obj, true)
+		if err != nil {
+			return err
+		}
+
+		slice = append(slice, obj)
+	}
+
+	*dst = slice
+	return nil
+}
+
+func {{ .ObjectSlicePtrDecoder }}(dec *Decoder, dst *[]*{{ .Type }}) error {
+	return __Internal{{ .ObjectSlicePtrDecoder }}(dec, dst)
+}
+
+func __Internal{{ .ObjectSlicePtrDecoder }}(dec *Decoder, dst *[]*{{ .Type }}) error {
+	tok, err := dec.NextToken()
+	if err != nil {
+		return err
+	}
+
+	if tok[0] == tokens.Null {
+		*dst = nil
+		return nil
+	}
+
+	if tok[0] != tokens.ArrayStart {
+		return ErrFormat
+	}
+
+	tok, err = dec.NextToken()
+	if err != nil {
+		return err
+	}
+
+	if tok[0] == tokens.ArrayEnd {
+		*dst = []*{{ .Type }}{}
+		return nil
+	}
+
+	if tok[0] != tokens.ObjectStart {
+		return ErrFormat
+	}
+
+	slice := make([]*{{ .Type }}, 1, DefaultSliceCapacity)
+	err = __Internal{{ .ObjectPtrDecoder }}(dec, &slice[0], true)
+	if err != nil {
+		return err
+	}
+
+	for {
+		tok, err := dec.NextToken()
+		if err != nil {
+			return err
+		}
+
+		if tok[0] == tokens.ArrayEnd {
+			break
+		}
+
+		if tok[0] != tokens.ObjectStart {
+			return ErrFormat
+		}
+
+		var obj *{{ .Type }}
+		err = __Internal{{ .ObjectPtrDecoder }}(dec, &obj, true)
+		if err != nil {
+			return err
+		}
+
+		slice = append(slice, obj)
+	}
+
+	*dst = slice
+	return nil
+}

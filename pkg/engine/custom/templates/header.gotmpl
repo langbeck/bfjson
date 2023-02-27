@@ -1,0 +1,32 @@
+package {{ .PackageName }}
+
+import (
+	"fmt"
+	"log"
+	"sync"
+
+	"github.com/langbeck/bfjson/pkg/json"
+	"github.com/langbeck/bfjson/pkg/unsafe"
+	"github.com/langbeck/bfjson/pkg/json/tokens"
+
+	// Required imports
+{{range $path, $_ := .Imports}}	"{{$path}}"{{end}}
+
+{{if .DotImport}}	. "{{.DotImport}}"{{end}}
+)
+
+// Keep references to conditionally used packages
+var (
+	_ = unsafe.BytesToString
+	_ = tokens.String
+	_ = log.Println
+	_ = sync.Pool{}
+)
+
+// Local aliases
+type Decoder = json.Decoder
+
+var (
+	DefaultSliceCapacity = json.DefaultSliceCapacity
+	ErrFormat            = json.ErrFormat
+)

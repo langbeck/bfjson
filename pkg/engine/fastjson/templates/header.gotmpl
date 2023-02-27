@@ -1,0 +1,27 @@
+package {{ .PackageName }}
+
+import (
+	"fmt"
+	"log"
+	"sync"
+
+	"github.com/valyala/fastjson"
+	"github.com/langbeck/bfjson/pkg/unsafe"
+	"github.com/langbeck/bfjson/pkg/engine/fastjson/basics"
+
+	// Required imports
+{{range $path, $_ := .Imports}}	"{{$path}}"{{end}}
+)
+
+// Keep references to conditionally used packages
+var (
+	_ = log.Println
+	_ = sync.Pool{}
+	_ = basics.DecodeString
+)
+
+// Local type aliases
+type (
+	Object = fastjson.Object
+	Value  = fastjson.Value
+)

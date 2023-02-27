@@ -1,0 +1,108 @@
+
+var {{ .ObjectPool }} = sync.Pool{New: func() interface{} { return new({{ .Type }}) }}
+
+func {{ .ObjectReleaser }}(obj *{{ .Type }}) {
+	if obj == nil {
+		return
+	}
+
+	{{range .Fields}}{{if .IsReleasable}}
+	Release_{{ .TypeName }}(obj.{{ .Name }})
+	{{end}}{{end}}
+
+	{{ .ObjectPool }}.Put(obj)
+}
+
+func New_{{ .Name }}() *{{ .Type }} {
+	ref := {{ .ObjectPool }}.Get().(*{{ .Type }})
+	*ref = {{ .Type }}{}
+	return ref
+}
+
+func {{ .ObjectDecoder }}(v *Value, dst *{{ .Type }}) error {
+{{range .Fields}}{{if .Default}}	dst.{{ .Name }} = {{ .Default }}
+{{end}}{{end}}
+
+	if v.Type() == fastjson.TypeNull {
+		return nil
+	}
+
+	obj, err := v.Object()
+	if err != nil {
+		return err
+	}
+
+	obj.Visit(func(key []byte, v *Value) {
+		switch unsafe.BytesToString(key) {
+		{{range .Fields}}case `{{ .NameJSON }}`:{{if .IsRawMessage}}
+			data, err := v.StringBytes()
+			if err != nil {
+				panic(err)
+			}
+
+			dst.{{ .Name }} = data
+		{{else if .IsUnmarshaler}}
+			data, err := v.StringBytes()
+			if err != nil {
+				panic(err)
+			}
+			{{if .IsPointer}}dst.{{ .Name }} = New_{{ .Type }}{{end}}
+			err = dst.{{ .Name }}.UnmarshalJSON(data)
+			if err != nil {
+				panic(fmt.Errorf(`could not decode attribute "{{ .NameJSON }}" from {{ $.Type }}: %w`, err))
+			}
+		{{else if not .IsBasic}}
+			err := {{ .DecoderRef }}(v, &dst.{{ .Name }})
+			if err != nil {
+				panic(fmt.Errorf(`could not decode attribute "{{ .NameJSON }}" from {{ $.Type }}: %w`, err))
+			}
+		{{else}}
+			err := basics.{{ .DecoderRef }}(v, &dst.{{ .Name }})
+			if err != nil {
+				panic(fmt.Errorf(`could not decode attribute "{{ .NameJSON }}" from {{ $.Type }}: %w`, err))
+			}
+		{{end}}
+		{{end}}
+		}
+	})
+
+	return nil
+}
+
+func {{ .ObjectPtrDecoder }}(v *Value, dst **{{ .Type }}) error {
+	if v.Type() == fastjson.TypeNull {
+		*dst = nil
+		return nil
+	}
+
+	pDst := New_{{ .Name }}()
+	err := {{ .ObjectDecoder }}(v, pDst)
+	if err != nil {
+		return err
+	}
+
+	*dst = pDst
+	return nil
+}
+
+func {{ .ObjectSliceDecoder }}(v *Value, dst *[]{{ .Type }}) error {
+	if v.Type() == fastjson.TypeNull {
+		*dst = nil
+		return nil
+	}
+
+	arr, err := v.Array()
+	if err != nil {
+		return err
+	}
+
+	slice := make([]{{ .Type }}, len(arr))
+	for idx, item := range arr {
+		err := {{ .ObjectDecoder }}(item, &slice[idx])
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
